@@ -1,0 +1,3 @@
+[submodule "template-k3s"]
+	path = template-k3s
+	url = https://github.com/gitpod-io/template-k3s
