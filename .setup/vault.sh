@@ -189,6 +189,9 @@ EOF
 # Wait for k3s to be setup before proceeding
 waitk3s
 
+# Ensure helm is installed
+setup_helm
+
 # Setup helm with the hashicorp repo
 run helm repo add hashicorp https://helm.releases.hashicorp.com
 run helm repo update
