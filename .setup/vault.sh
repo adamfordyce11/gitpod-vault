@@ -9,7 +9,8 @@ vaultreadylock="${script_dirname}/../.gitpod/_output/rootfs/vault-ready.lock"
 # Exit if vault has already been setup
 if test -f "${vaultreadylock}";
 then
-    exit 0
+  echo "Vault is already configured and setup"
+  exit 0
 fi
 
 # Set required variables
