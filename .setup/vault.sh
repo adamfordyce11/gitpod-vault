@@ -3,8 +3,8 @@
 # Need to follow these steps
 # - https://developer.hashicorp.com/vault/tutorials/kubernetes/kubernetes-raft-deployment-guide
 script_dirname="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-k3sreadylock="${script_dirname}/_output/rootfs/k3s-ready.lock"
-vaultreadylock="${script_dirname}/_output/rootfs/vault-ready.lock"
+k3sreadylock="${script_dirname}/../.gitpod/_output/rootfs/k3s-ready.lock"
+vaultreadylock="${script_dirname}/../.gitpod/_output/rootfs/vault-ready.lock"
 
 # Exit if vault has already been setup
 if test -f "${vaultreadylock}";
@@ -29,12 +29,14 @@ function waitk3s() {
 # Run system command and check the return code is 0 or exit
 function run() {
   cmd=$*
-  $($*)
-  if [[ $? -ne 0 ]];
+  out=$($*)
+  rc=$?
+  if [[ $rc -ne 0 ]];
   then
-    echo -e "\e[31m[ INFO  ]\e[m]: $*"
-    echo -e "\e[31m[ ERROR ]\e[m]: non-zero exit code from command"
-    exit $?
+    echo -e "\e[31m[ INFO  ]\e[m: $*"
+    echo -e "\e[31m[ ERROR ]\e[m: non-zero exit code($rc) from command"
+    echo -e "\e[31m[ ERROR ]\e[m: ${out}"
+    exit $rc
   else:
     echo -e "\e[31m[ INFO  ]\e[m]: $*"
   fi
@@ -51,6 +53,7 @@ function setup_helm() {
 
 # Generate the tls root CA for kubernetes and store it in kubernetes
 function generate_root_certificate() {
+  mkdir -p ${WORKDIR}
   # Generate the private key
   run openssl genrsa -out ${WORKDIR}/vault.key 2048
   # Create the CSR Configuration
@@ -99,13 +102,13 @@ EOF
 function add_csr_to_k8s() {
   if [[ ! -d "${WORKDIR}" ]];
   then
-    echo -e "\e[31m[ ERROR ]\e[m]: The WORKDIR: ${WORKDIR} does not exist!"
+    echo -e "\e[31m[ ERROR ]\e[m: The WORKDIR: ${WORKDIR} does not exist!"
     exit 1
   fi
 
   if [[ ! -f "${WORKDIR}/csr.yaml" ]];
   then
-    echo -e "\e[31m[ ERROR ]\e[m]: The file ${WORKDIR}/csr.yaml does not exist!"
+    echo -e "\e[31m[ ERROR ]\e[m: The file ${WORKDIR}/csr.yaml does not exist!"
     exit 1
   fi
 
@@ -117,10 +120,10 @@ function add_csr_to_k8s() {
 
   # Verify the csr is installed
   run kubectl get csr vault.svc
-  status=kubectl get csr vault.svc -o jsonpath="{.status.conditions[0].status}"
+  status=$(kubectl get csr vault.svc -o jsonpath="{.status.conditions[0].status}")
   if [[ "${status}" != "True" ]];
   then
-    echo -e "\e[31m[ ERROR ]\e[m]: The CSR was not installed to kubernetes correctly"
+    echo -e "\e[31m[ ERROR ]\e[m: The CSR was not installed to kubernetes correctly"
     exit 1
   fi
 
@@ -210,12 +213,15 @@ generate_vault_config
 
 if [[ ! -f "${WORKDIR}/overrides.yaml" ]];
 then
-  echo -e "\e[31m[ ERROR ]\e[m]: Vault overrides YAML not found"
+  echo -e "\e[31m[ ERROR ]\e[m: Vault overrides YAML not found"
   exit 1
 fi
 
 # Deploy the cluster
 run helm install -n $VAULT_K8S_NAMESPACE $VAULT_HELM_RELEASE_NAME hashicorp/vault -f ${WORKDIR}/overrides.yaml
+
+# Wait for pod to become ready
+kubectl -n $VAULT_K8S_NAMESPACE wait --for=condition=Ready pod/vault-0
 
 # Sleep until the pods are ready
 kubectl exec -n $VAULT_K8S_NAMESPACE vault-0 -- vault operator init \
